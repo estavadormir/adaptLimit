@@ -1,0 +1,14 @@
+[ui]
+completion.usePlaceholders = true
+diagnostic.analyses = true
+hover.linksInHover = true
+diagnostic.staticcheck = true
+
+[ui.inlayhint]
+hints = true
+
+[formatting]
+gofumpt = true
+
+[build]
+directoryFilters = ["-node_modules", "-vendor"]
