@@ -38,30 +38,48 @@ func NewBreaker(failureThreshold int, resetTimeout time.Duration) *Breaker {
 
 func (b *Breaker) Allow() bool {
 	b.mu.RLock()
-	defer b.mu.RUnlock()
 
 	now := time.Now()
 
 	switch b.state {
 	case StateClosed:
+		b.mu.RUnlock()
 		return true
 	case StateOpen:
 		if now.Sub(b.lastStateChange) > b.resetTimeout {
 			b.mu.RUnlock()
 			b.mu.Lock()
-			defer b.mu.Unlock()
 
 			if b.state == StateOpen && time.Now().Sub(b.lastStateChange) > b.resetTimeout {
 				b.setState(StateHalfOpen)
 				b.halfOpenCount = 0
+				b.mu.Unlock()
 				return true
 			}
-			return b.state == StateClosed
+
+			result := b.state == StateClosed
+			b.mu.Unlock()
+			return result
 		}
+		b.mu.RUnlock()
 		return false
 	case StateHalfOpen:
-		return b.halfOpenCount < b.halfOpenMax
+		allowed := b.halfOpenCount < b.halfOpenMax
+		if allowed {
+			b.mu.RUnlock()
+			b.mu.Lock()
+			if b.state == StateHalfOpen && b.halfOpenCount < b.halfOpenMax {
+				b.halfOpenCount++
+				b.mu.Unlock()
+				return true
+			}
+			b.mu.Unlock()
+			return false
+		}
+		b.mu.RUnlock()
+		return false
 	default:
+		b.mu.RUnlock()
 		return false
 	}
 }
@@ -74,11 +92,8 @@ func (b *Breaker) Success() {
 	case StateClosed:
 		b.failures = 0
 	case StateHalfOpen:
-		b.halfOpenCount++
-		if b.halfOpenCount >= b.halfOpenMax {
-			b.setState(StateClosed)
-			b.failures = 0
-		}
+		b.setState(StateClosed)
+		b.failures = 0
 	}
 }
 
